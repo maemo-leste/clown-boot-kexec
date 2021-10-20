@@ -9,6 +9,7 @@
 #include <linux/reboot.h>
 #include <linux/io.h>
 #include <linux/kallsyms.h>
+#include <linux/of_fdt.h>
 #include <linux/smp.h>
 #include <linux/uaccess.h>
 #include <linux/cpu.h>
@@ -71,6 +72,8 @@ void pulse(void)
  */
 static u32 soft_restart_stack[256];
 
+static bool motorola_legacy_dtb;
+
 static void kexec_info(struct kimage *image)
 {
 	int i;
@@ -98,7 +101,34 @@ static atomic_t waiting_for_crash_ipi;
 
 int machine_kexec_prepare(struct kimage *image)
 {
+	struct kexec_segment *current_segment;
+	__be32 header;
+	int i, err;
+
+	image->arch.kernel_r2 = image->start - KEXEC_ARM_ZIMAGE_OFFSET
+					+ KEXEC_ARM_ATAGS_OFFSET;
+
+	/*
+	 * No segment at default ATAGs address. try to locate
+	 * a dtb using magic.
+	 */
+	for (i = 0; i < image->nr_segments; i++) {
+		current_segment = &image->segment[i];
+		err = get_user(header, (__be32*)current_segment->buf);
+		if (err)
+			return err;
+
+		if (be32_to_cpu(header) == OF_DT_HEADER) {
+			pr_info("%s standard dtb format\n", __func__);
+			image->arch.kernel_r2 = current_segment->mem;
+		} else if (le32_to_cpu(header) == OF_DT_HEADER) {
+			pr_info("%s custom motorola dtb format\n", __func__);
+			motorola_legacy_dtb = true;
+		}
+	}
+
 	kexec_info(image);
+
 	return 0;
 }
 EXPORT_SYMBOL(machine_kexec_prepare);
@@ -436,8 +466,14 @@ void machine_kexec(struct kimage *image)
 	/* Prepare parameters for reboot_code_buffer*/
 	kexec_start_address = image->start;
 	kexec_indirection_page = page_list;
-	kexec_mach_type = machine_arch_type;
-	kexec_boot_atags = image->start - KEXEC_ARM_ZIMAGE_OFFSET + KEXEC_ARM_ATAGS_OFFSET;
+
+	/* Force device tree kexec_mach_type for standard dtb? */
+	if (!motorola_legacy_dtb &&
+	    machine_arch_type == MACH_TYPE_MAPPHONE)
+		kexec_mach_type = 0xffffffff;
+	else
+		kexec_mach_type = machine_arch_type;
+	kexec_boot_atags = image->arch.kernel_r2;
 
 	printascii("Bye!\n");
 
