@@ -19,6 +19,12 @@
 
 #ifndef __ASSEMBLY__
 
+#define ARCH_HAS_KIMAGE_ARCH
+struct kimage_arch {
+	u32 kernel_r2;
+};
+
+
 struct kimage;
 /* Provide a dummy definition to avoid build failures. */
 //static inline void crash_setup_regs(struct pt_regs *newregs,

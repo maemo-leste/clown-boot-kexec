@@ -13,6 +13,8 @@
 #include <asm/pgtable-hwdef.h>
 #include <asm/pgtable.h>
 
+.arch_extension sec
+
 ENTRY(omap_smc1)
 	stmfd   sp!, {r2-r12, lr}
 	mov	r12, r0
