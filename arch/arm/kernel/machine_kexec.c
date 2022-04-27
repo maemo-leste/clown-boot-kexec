@@ -228,7 +228,6 @@ void identity_map(unsigned long phys_addr)
 #define UART_THR   0
 #define UART_LSR_THRE	0x20
 
-extern void printascii(char*);
 
 static void (*kex_setup_mm_for_reboot)(char mode);
 static void __soft_restart(void *addr)
@@ -361,13 +360,9 @@ void soft_restart(unsigned long addr)
 	kex_setup_mm_for_reboot = (void *)kallsyms_lookup_name("setup_mm_for_reboot");
 
 	//Invalidate flush and disable l1
-
-
-	printascii("L2X0 Access\n");
-//Do this first so the ioremap will be around
+	//Do this first so the ioremap will be around
 	flushcachesinit(); 
 
-	printascii("L2X0 Disable\n");
 	/* Disable the L2 if we're the last man standing. */
 	if (num_online_cpus() == 1) 
 	{	
@@ -377,17 +372,10 @@ void soft_restart(unsigned long addr)
 
 		kexec_l2x0_inv_all();
 	}
-	else
-	{
-		printascii("***********Multiple CPU's online!!!***************\n");
-	}
-
-	printascii("Switch mm\n");
 
 	/* Take out a flat memory mapping. */
 	kex_setup_mm_for_reboot(0);
 
-	printascii("Switch stack\n");
 	/* Change to the new stack and continue with the reset. */
 	call_with_stack(__soft_restart, (void *)addr, (void *)stack);
 
@@ -448,7 +436,6 @@ void machine_kexec(struct kimage *image)
 	/* Disable preemption */
 	preempt_disable();
 
-	printascii("Disable IRQ's\n");
 	/* Disable interrupts first */
 	local_irq_disable();
 	local_fiq_disable();
@@ -457,11 +444,6 @@ void machine_kexec(struct kimage *image)
 	reboot_code_buffer_phys =
 	    page_to_pfn(image->control_code_page) << PAGE_SHIFT;
 	reboot_code_buffer = page_address(image->control_code_page);
-
-	sprintf(buf, "va: %08x\n", (int)reboot_code_buffer);
-	printascii(buf);
-	sprintf(buf, "pa: %08x\n", (int)reboot_code_buffer_phys);
-	printascii(buf);
 
 	/* Prepare parameters for reboot_code_buffer*/
 	kexec_start_address = image->start;
@@ -475,16 +457,12 @@ void machine_kexec(struct kimage *image)
 		kexec_mach_type = machine_arch_type;
 	kexec_boot_atags = image->arch.kernel_r2;
 
-	printascii("Bye!\n");
-
 	/* Take out a flat memory mapping. */
 	identity_map(UART3_BASE); // GPIO for pulse
 	identity_map(reboot_code_buffer_phys);
 
 //TODO: wtf does this do? copy relocate onto itself?
 	memcpy(reboot_code_buffer, relocate_new_kernel, relocate_new_kernel_size);
-
-	printascii("Flush Icache\n");
 	invalidate_icache_all();
 
 	soft_restart(reboot_code_buffer_phys);
